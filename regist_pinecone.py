@@ -1,3 +1,4 @@
+import uuid
 from cryptography.fernet import Fernet
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.text_splitter import CharacterTextSplitter
@@ -31,6 +32,24 @@ file_processors = {
     ".xls": process_xlsx,
 }
 
+
+# client = openai.OpenAI(api_key=os.getenv('OPENAI_KEY'))
+
+# def get_embedding(text, model="text-embedding-ada-002"):
+#    text = text.replace("\n", " ")
+#    return client.embeddings.create(input = [text], model=model).data[0].embedding
+
+
+# def embedding(sentences):
+#     if isinstance(sentences, str):
+#         return get_embedding(sentences, model=embedding_model)
+#     elif isinstance(sentences, list):
+#         result = []
+#         for sentence in sentences:
+#             result.append(get_embedding(sentence, model=embedding_model))
+#         return result
+
+
 def construct_knowledgebase(dataset_folder):
     # Retrieve the key from environment variable
     key_string = os.getenv("ENCRYPTION_KEY")
@@ -47,19 +66,29 @@ def construct_knowledgebase(dataset_folder):
     index = pinecone.Index(index_name)
     
     embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
-    vectorstore = Pinecone(index, embeddings, "text")
+    # vectorstore = Pinecone(index, embeddings, "text")
     
-    if index_name not in pinecone.list_indexes():
-        pinecone.create_index(index_name, dimension=1536, metric="cosine")
+    if index_name in pinecone.list_indexes():
+        pinecone.delete_index(index_name)
+    pinecone.create_index(index_name, dimension=1536, metric="cosine")
     
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     for root, dirs, files in os.walk(dataset_folder):
         for file in tqdm(files, desc=f"Processing files in {root}"):
             if file.endswith(tuple(ALLOWED_FILES)):
+                print(file)
                 file_extension = os.path.splitext(file)[1]
                 documents = file_processors[file_extension](os.path.join(root, file))
                 docs = text_splitter.split_documents(documents)
-                vectorstore.add_documents(documents=docs, index_name=index_name)
+                id_list = []
+                embedding_list = []
+                metadata_list = []
+                for doc in docs:
+                    id_list.append(str(uuid.uuid4()))
+                    metadata_list.append({"text": cipher_suite.encrypt(doc.page_content.encode()).decode()})
+                embedding_list = embeddings.embed_documents([doc.page_content for doc in docs])
+                index.upsert(vectors=list(zip(id_list, embedding_list, metadata_list)))
+                # vectorstore.add_documents(documents=docs, index_name=index_name)
 
 
 if __name__ == "__main__":
