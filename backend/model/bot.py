@@ -1,9 +1,9 @@
 import os
-import dotenv
 import openai
 import pinecone
-
 from cryptography.fernet import Fernet
+
+from embedding.embedding import embed_text
 
 
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -11,9 +11,14 @@ client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 class ChatBot():
 
     def __init__(self):
+        self.private = os.getenv("PRIVATE", "false").lower() == "true"
         self.llm_model = os.getenv("LLM_MODEL")
         
         self.index_name = os.getenv("PINECONE_INDEX_NAME")
+        pinecone.init(
+            api_key=os.getenv("PINECONE_API_KEY"),
+            environment=os.getenv("PINECONE_ENV"),
+        )
         self.pinecone_index = pinecone.Index(self.index_name)
         self.top_k = 5
         
@@ -26,11 +31,9 @@ class ChatBot():
         key_string = os.getenv("ENCRYPTION_KEY")
         self.cipher_suite = Fernet(key_string.encode())
 
-    def get_embedding(self, text):
-        return client.embeddings.create(input=text, model=os.getenv("EMBEDDING_MODEL")).data[0].embedding
-    
+  
     def query_db(self, query):
-        query_vector = self.get_embedding(query)
+        query_vector = embed_text(query)
         results = self.pinecone_index.query(query_vector, top_k=self.top_k)
         matches = results.to_dict()['matches']
         ids = [match['id'] for match in matches]
