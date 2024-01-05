@@ -31,7 +31,6 @@ class ChatBot():
         key_string = os.getenv("ENCRYPTION_KEY")
         self.cipher_suite = Fernet(key_string.encode())
 
-  
     def query_db(self, query):
         query_vector = embed_text(query)
         results = self.pinecone_index.query(query_vector, top_k=self.top_k)
